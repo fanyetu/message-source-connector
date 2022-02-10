@@ -1,0 +1,21 @@
+POST /connectors HTTP/1.1
+Host: 192.168.152.128:8083
+Content-Type: application/json
+Content-Length: 594
+
+{
+    "name": "simple-message-connector",
+    "config": {
+        "connector.class": "com.capinfo.kafka.connector.MessageSourceConnector",
+        "tasks.max": "1",
+        "connection.url": "jdbc:mysql://192.168.152.128:3306/test",
+        "connection.user": "root",
+        "connection.password": "111111",
+        "query": "select id,target_service,source_service,content,create_time from t_message",
+        "mode": "timestamp+incrementing",
+        "timestamp.column.name": "create_time",
+        "incrementing.column.name": "id",
+        "source.column.name": "source_service",
+        "target.column.name": "target_service"
+    }
+}
