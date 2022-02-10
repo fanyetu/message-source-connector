@@ -20,12 +20,13 @@ public class KafkaMessageHelper extends AbstractMessageHelper implements Message
     }
 
     @Override
-    public void receive(MessageReceiveHandler handler) {
+    public void startReceive(String topic, MessageReceiveHandler handler) {
 
     }
 
+
     @Override
-    public void consume(MessageConsumeHandler handler) {
+    public void startConsume(String topic, MessageConsumeHandler handler) {
 
     }
 }

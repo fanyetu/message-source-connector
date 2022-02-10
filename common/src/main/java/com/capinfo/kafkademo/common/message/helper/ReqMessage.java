@@ -13,8 +13,8 @@ import lombok.*;
 public class ReqMessage extends BaseMessage {
 
     @Builder(builderMethodName = "of")
-    public ReqMessage(String sourceTopic, String content, String targetService) {
-        super(sourceTopic, content);
+    public ReqMessage(String messageId, String sourceTopic, String content, String targetService) {
+        super(messageId, sourceTopic, content);
         this.targetService = targetService;
     }
 

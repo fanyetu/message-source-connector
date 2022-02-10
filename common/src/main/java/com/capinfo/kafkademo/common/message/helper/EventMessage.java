@@ -13,7 +13,7 @@ import lombok.*;
 public class EventMessage extends BaseMessage {
 
     @Builder(builderMethodName = "of")
-    public EventMessage(String sourceTopic, String content) {
-        super(sourceTopic, content);
+    public EventMessage(String messageId, String sourceTopic, String content) {
+        super(messageId, sourceTopic, content);
     }
 }

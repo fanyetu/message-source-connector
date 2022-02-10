@@ -1,5 +1,6 @@
 package com.capinfo.kafkademo.common.message.helper;
 
+import cn.hutool.core.util.IdUtil;
 import com.capinfo.kafkademo.common.message.db.Message;
 import com.capinfo.kafkademo.common.message.db.MessageRepository;
 import org.springframework.beans.BeanUtils;
@@ -13,24 +14,31 @@ public abstract class AbstractMessageHelper implements MessageHelper {
     private MessageRepository messageRepository;
 
     /**
-     * 发送消息，存入数据库，MessageSourceConnector会将数据推送到kafka
-     * @param req
+     * 生成message id
      * @return
      */
+    protected String genMessageId() {
+        return IdUtil.fastSimpleUUID();
+    }
+
+    /**
+     * 发送消息，存入数据库，MessageSourceConnector会将数据推送到kafka
+     * @param req
+     */
     @Override
-    public boolean send(ReqMessage req) {
+    public void send(ReqMessage req) {
         Message message = new Message();
         BeanUtils.copyProperties(req, message);
+        message.setMessageId(genMessageId());
         this.messageRepository.save(message);
-        return true;
     }
 
     @Override
-    public boolean publish(EventMessage event) {
+    public void publish(EventMessage event) {
         Message message = new Message();
         BeanUtils.copyProperties(event, message);
+        message.setMessageId(genMessageId());
         this.messageRepository.save(message);
-        return true;
     }
 
     public MessageRepository getMessageRepository() {
