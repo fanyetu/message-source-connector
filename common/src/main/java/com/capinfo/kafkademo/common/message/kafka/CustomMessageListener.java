@@ -17,17 +17,14 @@ public abstract class CustomMessageListener {
 
     private static int NUMBER_OF_LISTENERS = 0;
 
-    @Autowired
-    private KafkaProperties kafkaProperties;
-
-    public abstract KafkaListenerEndpoint createKafkaListenerEndpoint(String name, String topic);
+    public abstract KafkaListenerEndpoint createKafkaListenerEndpoint(String name, String topic, String groupId);
 
     protected MethodKafkaListenerEndpoint<String, String> createDefaultMethodKafkaListenerEndpoint(
-            String name, String topic) {
+            String name, String topic, String groupId) {
         MethodKafkaListenerEndpoint<String, String> kafkaListenerEndpoint =
                 new MethodKafkaListenerEndpoint<>();
         kafkaListenerEndpoint.setId(getConsumerId(name));
-        kafkaListenerEndpoint.setGroupId(kafkaProperties.getConsumer().getGroupId());
+        kafkaListenerEndpoint.setGroupId(groupId);
         kafkaListenerEndpoint.setAutoStartup(true);
         kafkaListenerEndpoint.setTopics(topic);
         kafkaListenerEndpoint.setMessageHandlerMethodFactory(new DefaultMessageHandlerMethodFactory());

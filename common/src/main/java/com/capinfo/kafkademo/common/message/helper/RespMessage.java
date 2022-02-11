@@ -1,10 +1,22 @@
 package com.capinfo.kafkademo.common.message.helper;
 
+import lombok.*;
+
 /**
  * @author zhanghaonan
  * @date 2022/2/5
  */
-public class RespMessage {
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+@Data
+@NoArgsConstructor
+public class RespMessage extends BaseMessage {
 
+    @Builder(builderMethodName = "of")
+    public RespMessage(String messageId, String sourceTopic, String content, String targetService) {
+        super(messageId, sourceTopic, content);
+        this.targetTopic = targetService;
+    }
 
+    private String targetTopic;
 }

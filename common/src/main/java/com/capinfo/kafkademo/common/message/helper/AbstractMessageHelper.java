@@ -5,6 +5,8 @@ import com.capinfo.kafkademo.common.message.db.Message;
 import com.capinfo.kafkademo.common.message.db.MessageRepository;
 import org.springframework.beans.BeanUtils;
 
+import java.util.Date;
+
 /**
  * @author zhanghaonan
  * @date 2022/2/5
@@ -27,17 +29,24 @@ public abstract class AbstractMessageHelper implements MessageHelper {
      */
     @Override
     public void send(ReqMessage req) {
-        Message message = new Message();
-        BeanUtils.copyProperties(req, message);
-        message.setMessageId(genMessageId());
-        this.messageRepository.save(message);
+        sendMessage(req);
+    }
+
+    @Override
+    public void response(RespMessage resp) {
+        sendMessage(resp);
     }
 
     @Override
     public void publish(EventMessage event) {
+        sendMessage(event);
+    }
+
+    private void sendMessage(BaseMessage req) {
         Message message = new Message();
-        BeanUtils.copyProperties(event, message);
+        BeanUtils.copyProperties(req, message);
         message.setMessageId(genMessageId());
+        message.setCreateTime(new Date());
         this.messageRepository.save(message);
     }
 
