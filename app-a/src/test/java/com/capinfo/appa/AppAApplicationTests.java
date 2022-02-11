@@ -13,6 +13,7 @@ import org.springframework.test.context.junit4.SpringRunner;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = AppAApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -28,17 +29,28 @@ class AppAApplicationTests {
 
     @Test
     @SneakyThrows
+    public void testStartReceive() {
+        CountDownLatch cdl = new CountDownLatch(1);
+        kafkaMessageHelper.startReceive("app-a", ((req, resp) -> {
+            logger.info("get resp message, {}", resp.toString());
+        }));
+
+        cdl.await();
+    }
+
+    @Test
+    @SneakyThrows
     public void testStartResponse() {
-        kafkaMessageHelper.startResponse("app-b", new MessageResponseHandler() {
-            @Override
-            public RespMessage receive(ReqMessage req, RespMessage resp) {
-                logger.info("get req message, {}", req.toString());
-                resp.setContent("test response message");
-                return resp;
-            }
+        CountDownLatch cdl = new CountDownLatch(1);
+        kafkaMessageHelper.startResponse("app-b", (req, resp) -> {
+            logger.info("get req message, {}", req.toString());
+            resp.setContent("test response message");
+            cdl.countDown();
+            return resp;
         });
 
-        Thread.sleep(60000);
+        cdl.await();
+        Thread.sleep(1000);
     }
 
     @Test

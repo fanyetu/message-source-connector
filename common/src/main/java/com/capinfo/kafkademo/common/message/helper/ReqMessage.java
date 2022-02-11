@@ -1,8 +1,8 @@
 package com.capinfo.kafkademo.common.message.helper;
 
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import lombok.*;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.util.Utf8;
 
 /**
  * @author zhanghaonan
@@ -22,17 +22,12 @@ public class ReqMessage extends BaseMessage {
 
     private String targetTopic;
 
-    public static ReqMessage jsonToMessage(String json) {
+    public static ReqMessage avroToMessage(GenericData.Record value) {
         ReqMessage req = new ReqMessage();
-        JSONObject jsonObject = JSONUtil.parseObj(json);
-        req.setContent(jsonObject.getStr("content"));
-        req.setMessageId(jsonObject.getStr("message_id"));
-        req.setSourceTopic(jsonObject.getStr("source_topic"));
-        JSONObject targetTopic = jsonObject.getJSONObject("target_topic");
-        if (targetTopic != null) {
-            req.setTargetTopic(targetTopic.getStr("string"));
-        }
-
+        req.setMessageId(((Utf8) value.get("message_id")).toString());
+        req.setContent(((Utf8) value.get("content")).toString());
+        req.setSourceTopic(((Utf8) value.get("source_topic")).toString());
+        req.setTargetTopic(((Utf8) value.get("target_topic")).toString());
         return req;
     }
 

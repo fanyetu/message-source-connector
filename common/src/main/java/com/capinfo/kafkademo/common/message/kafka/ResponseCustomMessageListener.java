@@ -6,6 +6,7 @@ import com.capinfo.kafkademo.common.message.helper.ReqMessage;
 import com.capinfo.kafkademo.common.message.helper.RespMessage;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.avro.generic.GenericData;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.config.KafkaListenerEndpoint;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
@@ -38,7 +39,7 @@ public class ResponseCustomMessageListener extends CustomMessageListener{
     }
 
     @Slf4j
-    private static class ResponseMessageListener implements MessageListener<String, String> {
+    private static class ResponseMessageListener implements MessageListener<String, GenericData.Record> {
 
         private MessageResponseHandler messageResponseHandler;
 
@@ -50,20 +51,23 @@ public class ResponseCustomMessageListener extends CustomMessageListener{
         }
 
         @Override
-        public void onMessage(ConsumerRecord<String, String> record) {
-            log.info("My message listener got a new record: " + record);
+        public void onMessage(ConsumerRecord<String, GenericData.Record> record) {
+            log.info("Response message listener 开始处理消息记录: " + record);
 
             // 读取数据，并返回
-            String json = record.value();
-            ReqMessage req = ReqMessage.jsonToMessage(json);
+            GenericData.Record value = record.value();
+            ReqMessage req = ReqMessage.avroToMessage(value);
             RespMessage resp = new RespMessage();
+
+            // TODO 存储reqMessage
             resp.setTargetTopic(req.getSourceTopic());
+            resp.setSourceTopic(req.getTargetTopic());
             resp.setMessageId(req.getMessageId());
 
             resp = messageResponseHandler.receive(req, resp);
             kafkaMessageHelper.response(resp);
 
-            log.info("My message listener done processing record: " + record);
+            log.info("Response message listener 消息记录处理完成. 返回值: " + resp);
         }
     }
 }
