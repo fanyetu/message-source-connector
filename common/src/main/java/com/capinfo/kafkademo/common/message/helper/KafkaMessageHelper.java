@@ -34,6 +34,19 @@ public class KafkaMessageHelper extends AbstractMessageHelper implements Message
 
     @Override
     public RespMessage invoke(ReqMessage req) {
+        /*
+        1.调用send方法发送消息；
+        2.将请求消息存入内存；
+        3.判断是否已有接收线程；
+        4.如果有，则使用现有的接收线程；
+        5.如果没有，则启动接收线程；
+        6.主线程等待；
+        7.接收到数据后判断当前内存中是否有该消息；
+        8.如果有该消息，则将返回消息设置在内存中，并唤醒主线程；
+        9.如果没有该消息，则跳过；
+        10.主线程通过messageId获取返回消息，删除内存中消息，并返回。
+         */
+
         return null;
     }
 

@@ -4,6 +4,7 @@ import cn.hutool.core.util.IdUtil;
 import com.capinfo.kafkademo.common.message.db.Message;
 import com.capinfo.kafkademo.common.message.db.MessageRepository;
 import org.springframework.beans.BeanUtils;
+import reactor.util.function.Tuple3;
 
 import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,7 +17,7 @@ public abstract class AbstractMessageHelper implements MessageHelper {
 
     private MessageRepository messageRepository;
 
-    protected ConcurrentHashMap<String, Message> reqMessageConcurrentHashMap
+    protected ConcurrentHashMap<String, Tuple3<Thread, ReqMessage, RespMessage>> reqMessageConcurrentHashMap
             = new ConcurrentHashMap<>(16);
 
     /**
@@ -34,17 +35,11 @@ public abstract class AbstractMessageHelper implements MessageHelper {
      * @return
      */
     public ReqMessage getReqMessage(String messageId) {
-        Message message = reqMessageConcurrentHashMap.get(messageId);
-        if (message == null) {
+        Tuple3<Thread, ReqMessage, RespMessage> tuple = reqMessageConcurrentHashMap.get(messageId);
+        if (tuple == null) {
             return null;
         }
-        ReqMessage reqMessage = new ReqMessage();
-        reqMessage.setMessageId(message.getMessageId());
-        reqMessage.setSourceTopic(message.getSourceTopic());
-        reqMessage.setTargetTopic(message.getTargetTopic());
-        reqMessage.setContent(message.getContent());
-
-        return reqMessage;
+       return tuple.getT2();
     }
 
     /**
@@ -68,8 +63,13 @@ public abstract class AbstractMessageHelper implements MessageHelper {
         reqMessageConcurrentHashMap.put(message.getMessageId(), message);
     }
 
+    /**
+     * 返回响应消息
+     * @param resp
+     */
     @Override
     public void response(RespMessage resp) {
+        // TODO 有问题，resp的messageId要和req的一样
         sendMessage(resp);
     }
 
