@@ -29,10 +29,22 @@ class AppAApplicationTests {
 
     @Test
     @SneakyThrows
+    public void testStartConsume() {
+        CountDownLatch cdl = new CountDownLatch(1);
+        kafkaMessageHelper.startConsume("app-event", (event -> {
+            logger.info("get event message, {}", event.toString());
+            cdl.countDown();
+        }));
+        cdl.await();
+    }
+
+    @Test
+    @SneakyThrows
     public void testStartReceive() {
         CountDownLatch cdl = new CountDownLatch(1);
         kafkaMessageHelper.startReceive("app-a", ((req, resp) -> {
             logger.info("get resp message, {}", resp.toString());
+            cdl.countDown();
         }));
 
         cdl.await();

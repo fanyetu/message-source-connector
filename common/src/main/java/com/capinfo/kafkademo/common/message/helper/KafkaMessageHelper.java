@@ -3,6 +3,7 @@ package com.capinfo.kafkademo.common.message.helper;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.system.SystemUtil;
 import com.capinfo.kafkademo.common.message.db.MessageRepository;
+import com.capinfo.kafkademo.common.message.kafka.ConsumeCustomMessageListener;
 import com.capinfo.kafkademo.common.message.kafka.ReceiveCustomMessageListener;
 import com.capinfo.kafkademo.common.message.kafka.ResponseCustomMessageListener;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,10 @@ public class KafkaMessageHelper extends AbstractMessageHelper implements Message
 
     @Override
     public void startConsume(String topic, MessageConsumeHandler handler) {
-
+        ConsumeCustomMessageListener consumeCustomMessageListener = new ConsumeCustomMessageListener(handler, this);
+        kafkaListenerEndpointRegistry.registerListenerContainer(
+                consumeCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic,
+                        SystemUtil.getHostInfo().getName() + Thread.currentThread().getName()),
+                kafkaListenerContainerFactory, true);
     }
 }
