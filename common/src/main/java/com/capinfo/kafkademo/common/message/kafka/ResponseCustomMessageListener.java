@@ -1,5 +1,7 @@
 package com.capinfo.kafkademo.common.message.kafka;
 
+import com.capinfo.kafkademo.common.message.db.ReceivedMessage;
+import com.capinfo.kafkademo.common.message.db.ReceivedMessageRepository;
 import com.capinfo.kafkademo.common.message.helper.KafkaMessageHelper;
 import com.capinfo.kafkademo.common.message.helper.MessageResponseHandler;
 import com.capinfo.kafkademo.common.message.helper.ReqMessage;
@@ -12,19 +14,25 @@ import org.springframework.kafka.config.KafkaListenerEndpoint;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
 import org.springframework.kafka.listener.MessageListener;
 
+import java.util.Date;
+
 /**
  * @author zhanghaonan
  * @date 2022/2/10
  */
-public class ResponseCustomMessageListener extends CustomMessageListener{
+public class ResponseCustomMessageListener extends CustomMessageListener {
 
     private MessageResponseHandler messageResponseHandler;
 
     private KafkaMessageHelper kafkaMessageHelper;
 
-    public ResponseCustomMessageListener(MessageResponseHandler messageResponseHandler, KafkaMessageHelper kafkaMessageHelper) {
+    private ReceivedMessageRepository receivedMessageRepository;
+
+    public ResponseCustomMessageListener(MessageResponseHandler messageResponseHandler, KafkaMessageHelper kafkaMessageHelper,
+                                         ReceivedMessageRepository receivedMessageRepository) {
         this.messageResponseHandler = messageResponseHandler;
         this.kafkaMessageHelper = kafkaMessageHelper;
+        this.receivedMessageRepository = receivedMessageRepository;
     }
 
     @Override
@@ -32,7 +40,8 @@ public class ResponseCustomMessageListener extends CustomMessageListener{
     public KafkaListenerEndpoint createKafkaListenerEndpoint(String name, String topic, String groupId) {
         MethodKafkaListenerEndpoint<String, String> kafkaListenerEndpoint =
                 createDefaultMethodKafkaListenerEndpoint(name, topic, groupId);
-        kafkaListenerEndpoint.setBean(new ResponseMessageListener(messageResponseHandler, kafkaMessageHelper));
+        kafkaListenerEndpoint.setBean(new ResponseMessageListener(messageResponseHandler, kafkaMessageHelper,
+                receivedMessageRepository));
         kafkaListenerEndpoint.setMethod(ResponseMessageListener.class.getMethod(
                 "onMessage", ConsumerRecord.class));
         return kafkaListenerEndpoint;
@@ -45,9 +54,14 @@ public class ResponseCustomMessageListener extends CustomMessageListener{
 
         private KafkaMessageHelper kafkaMessageHelper;
 
-        public ResponseMessageListener(MessageResponseHandler messageResponseHandler, KafkaMessageHelper kafkaMessageHelper) {
+
+        private ReceivedMessageRepository receivedMessageRepository;
+
+        public ResponseMessageListener(MessageResponseHandler messageResponseHandler, KafkaMessageHelper kafkaMessageHelper,
+                                       ReceivedMessageRepository receivedMessageRepository) {
             this.messageResponseHandler = messageResponseHandler;
             this.kafkaMessageHelper = kafkaMessageHelper;
+            this.receivedMessageRepository = receivedMessageRepository;
         }
 
         @Override
@@ -57,9 +71,16 @@ public class ResponseCustomMessageListener extends CustomMessageListener{
             // 读取数据，并返回
             GenericData.Record value = record.value();
             ReqMessage req = ReqMessage.avroToMessage(value);
-            RespMessage resp = new RespMessage();
 
-            // TODO 存储reqMessage
+            ReceivedMessage receivedMessage = new ReceivedMessage();
+            receivedMessage.setMessageId(req.getMessageId());
+            receivedMessage.setTopic(req.getTargetTopic());
+            receivedMessage.setReceiveTime(new Date());
+            receivedMessage.setContent(req.getContent());
+            receivedMessage.setInstanceKey(kafkaMessageHelper.getInstanceKey());
+            receivedMessageRepository.save(receivedMessage);
+
+            RespMessage resp = new RespMessage();
             resp.setTargetTopic(req.getSourceTopic());
             resp.setSourceTopic(req.getTargetTopic());
             resp.setMessageId(req.getMessageId());

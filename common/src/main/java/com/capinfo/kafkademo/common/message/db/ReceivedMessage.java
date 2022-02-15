@@ -7,12 +7,12 @@ import java.util.Date;
 
 /**
  * @author zhanghaonan
- * @date 2022/2/5
+ * @date 2022/2/14
  */
 @Entity
-@Table(name = "t_message")
+@Table(name = "t_received_message")
 @Data
-public class Message {
+public class ReceivedMessage {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,24 +21,15 @@ public class Message {
     @Column(name = "message_id", nullable = false)
     private String messageId;
 
-    @Column(name = "target_topic")
-    private String targetTopic;
-
-    @Column(name = "source_topic", nullable = false)
-    private String sourceTopic;
+    @Column(name = "topic")
+    private String topic;
 
     @Column(name = "content", nullable = false, length = 2000)
     private String content;
 
-    @Column(name = "create_time")
-    private Date createTime;
+    @Column(name = "receive_time")
+    private Date receiveTime;
 
     @Column(name = "instance_key")
     private String instanceKey;
-
-    @Column(name = "process_flag")
-    private String processFlag;
-
-    @Column(name = "message_type")
-    private String messageType;
 }

@@ -11,7 +11,7 @@ public interface MessageHelper {
      *
      * @param req
      */
-    void send(ReqMessage req);
+    String send(ReqMessage req);
 
     /**
      * 回复消息
@@ -24,7 +24,9 @@ public interface MessageHelper {
      *
      * @param event
      */
-    void publish(EventMessage event);
+    String publish(EventMessage event);
+
+    String getInstanceKey();
 
     /**
      * 同步调用

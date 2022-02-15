@@ -1,24 +1,37 @@
 package com.capinfo.kafkademo.common.message.helper;
 
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.system.SystemUtil;
+import com.capinfo.kafkademo.common.message.constant.MessageConstant;
+import com.capinfo.kafkademo.common.message.db.Message;
 import com.capinfo.kafkademo.common.message.db.MessageRepository;
+import com.capinfo.kafkademo.common.message.db.ReceivedMessage;
+import com.capinfo.kafkademo.common.message.db.ReceivedMessageRepository;
 import com.capinfo.kafkademo.common.message.kafka.ConsumeCustomMessageListener;
 import com.capinfo.kafkademo.common.message.kafka.ReceiveCustomMessageListener;
 import com.capinfo.kafkademo.common.message.kafka.ResponseCustomMessageListener;
+import org.apache.kafka.common.network.Receive;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.config.KafkaListenerContainerFactory;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
+ * TODO 加上数据校验
+ *
  * @author zhanghaonan
  * @date 2022/2/5
  */
 @Component
-public class KafkaMessageHelper extends AbstractMessageHelper implements MessageHelper {
+public class KafkaMessageHelper implements MessageHelper {
 
     public static final String GROUP_SUFFIX = "_GROUP";
 
@@ -28,52 +41,189 @@ public class KafkaMessageHelper extends AbstractMessageHelper implements Message
     @Resource
     private KafkaListenerContainerFactory kafkaListenerContainerFactory;
 
-    public KafkaMessageHelper(MessageRepository messageRepository) {
-        this.setMessageRepository(messageRepository);
+    @Resource
+    private MessageRepository messageRepository;
+
+    @Resource
+    private ReceivedMessageRepository receivedMessageRepository;
+
+    @Value("${server.port}")
+    private String port;
+
+    private final ConcurrentHashMap<String, String> listenerMap = new ConcurrentHashMap<>(8);
+
+    /**
+     * 删除对应的reqMessage
+     *
+     * @param messageId
+     */
+    public void makeReqMessageProcessed(String messageId) {
+        messageRepository.updateProcessFlag(messageId);
+    }
+
+    /**
+     * 通过messageId获取请求消息
+     *
+     * @param messageId
+     * @return
+     */
+    public Message getReqMessage(String messageId) {
+        return messageRepository.findMessageByMessageId(messageId);
+    }
+
+    /**
+     * 生成message id
+     *
+     * @return
+     */
+    protected String genMessageId() {
+        return IdUtil.fastSimpleUUID();
+    }
+
+    /**
+     * 发送消息，存入数据库，MessageSourceConnector会将数据推送到kafka
+     *
+     * @param req
+     */
+    @Override
+    public String send(ReqMessage req) {
+        String messageId = genMessageId();
+        req.setMessageId(messageId);
+        sendMessage(req, MessageConstant.MESSAGE_TYPE_REQ);
+        return messageId;
+    }
+
+    /**
+     * 返回响应消息
+     *
+     * @param resp
+     */
+    @Override
+    public void response(RespMessage resp) {
+        sendMessage(resp, MessageConstant.MESSAGE_TYPE_RESP);
+    }
+
+    @Override
+    public String publish(EventMessage event) {
+        String messageId = genMessageId();
+        event.setMessageId(messageId);
+        sendMessage(event, MessageConstant.MESSAGE_TYPE_EVENT);
+        return messageId;
+    }
+
+    private void sendMessage(BaseMessage req, String messageType) {
+        Message message = new Message();
+        BeanUtils.copyProperties(req, message);
+        message.setCreateTime(new Date());
+        message.setInstanceKey(getInstanceKey());
+        message.setProcessFlag(
+                MessageConstant.MESSAGE_TYPE_REQ.equals(messageType) ?
+                        MessageConstant.FALSE : MessageConstant.TRUE
+        );
+        message.setMessageType(messageType);
+        this.messageRepository.save(message);
+    }
+
+    @Override
+    public String getInstanceKey() {
+        return SystemUtil.getHostInfo().getAddress() + ":" + port;
     }
 
     @Override
     public RespMessage invoke(ReqMessage req) {
-        /*
-        1.调用send方法发送消息；
-        2.将请求消息存入内存；
-        3.判断是否已有接收线程；
-        4.如果有，则使用现有的接收线程；
-        5.如果没有，则启动接收线程；
-        6.主线程等待；
-        7.接收到数据后判断当前内存中是否有该消息；
-        8.如果有该消息，则将返回消息设置在内存中，并唤醒主线程；
-        9.如果没有该消息，则跳过；
-        10.主线程通过messageId获取返回消息，删除内存中消息，并返回。
-         */
+        String messageId = send(req);
 
-        return null;
+        String sourceTopic = req.getSourceTopic();
+        String s = listenerMap.get(sourceTopic);
+        if (StrUtil.isBlank(s)) {
+            startReceive(sourceTopic, (request, response) -> {
+                // do nothing
+            });
+        }
+
+        int count = 300;
+        while (true) {
+            ReceivedMessage result = receivedMessageRepository.findReceivedMessageByMessageId(messageId);
+            if (result != null) {
+                RespMessage respMessage = new RespMessage();
+                respMessage.setMessageId(messageId);
+                respMessage.setSourceTopic(req.getTargetTopic());
+                respMessage.setTargetTopic(result.getTopic());
+                respMessage.setContent(result.getContent());
+                return respMessage;
+            }
+
+            if (count <= 0) {
+                return null;
+            }
+
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                // do nothing
+            }
+            count--;
+        }
     }
 
     @Override
     public void startReceive(String topic, MessageReceiveHandler handler) {
-        ReceiveCustomMessageListener receiveCustomMessageListener = new ReceiveCustomMessageListener(handler, this);
-        kafkaListenerEndpointRegistry.registerListenerContainer(
-                receiveCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic,
-                        SystemUtil.getHostInfo().getName() + Thread.currentThread().getName()),
-                kafkaListenerContainerFactory, true);
+        ReentrantLock lock = new ReentrantLock();
+        lock.lock();
+        try {
+            checkListener(topic);
+            ReceiveCustomMessageListener receiveCustomMessageListener = new ReceiveCustomMessageListener(handler,
+                    this, receivedMessageRepository);
+            kafkaListenerEndpointRegistry.registerListenerContainer(
+                    receiveCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic,
+                            getInstanceKey()),
+                    kafkaListenerContainerFactory, true);
+            listenerMap.put(topic, MessageConstant.TRUE);
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
     public void startResponse(String topic, MessageResponseHandler handler) {
-        ResponseCustomMessageListener responseCustomMessageListener = new ResponseCustomMessageListener(handler, this);
-        kafkaListenerEndpointRegistry.registerListenerContainer(
-                responseCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic, topic + GROUP_SUFFIX),
-                kafkaListenerContainerFactory, true);
+        ReentrantLock lock = new ReentrantLock();
+        lock.lock();
+        try {
+            checkListener(topic);
+            ResponseCustomMessageListener responseCustomMessageListener = new ResponseCustomMessageListener(handler,
+                    this, receivedMessageRepository);
+            kafkaListenerEndpointRegistry.registerListenerContainer(
+                    responseCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic, topic + GROUP_SUFFIX),
+                    kafkaListenerContainerFactory, true);
+            listenerMap.put(topic, MessageConstant.TRUE);
+        } finally {
+            lock.unlock();
+        }
     }
 
 
     @Override
     public void startConsume(String topic, MessageConsumeHandler handler) {
-        ConsumeCustomMessageListener consumeCustomMessageListener = new ConsumeCustomMessageListener(handler, this);
-        kafkaListenerEndpointRegistry.registerListenerContainer(
-                consumeCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic,
-                        SystemUtil.getHostInfo().getName() + Thread.currentThread().getName()),
-                kafkaListenerContainerFactory, true);
+        ReentrantLock lock = new ReentrantLock();
+        lock.lock();
+        try {
+            checkListener(topic);
+            ConsumeCustomMessageListener consumeCustomMessageListener = new ConsumeCustomMessageListener(handler,
+                    this, receivedMessageRepository);
+            kafkaListenerEndpointRegistry.registerListenerContainer(
+                    consumeCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic,
+                            topic + GROUP_SUFFIX),
+                    kafkaListenerContainerFactory, true);
+            listenerMap.put(topic, MessageConstant.TRUE);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void checkListener(String topic) {
+        String s = listenerMap.get(topic);
+        if (StrUtil.isNotBlank(s)) {
+            throw new RuntimeException("当前已注册该主题监听器，无需重复注册");
+        }
     }
 }
