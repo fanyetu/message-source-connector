@@ -72,7 +72,7 @@ public class ReceiveCustomMessageListener extends CustomMessageListener {
             // 读取数据，判断是否是在当前内存中，如果在则处理。
             GenericData.Record value = record.value();
             String messageId = ((Utf8) value.get("message_id")).toString();
-            Message message = kafkaMessageHelper.getReqMessage(messageId);
+            Message message = kafkaMessageHelper.getUnprocessedReqMessage(messageId);
             if (message == null || !kafkaMessageHelper.getInstanceKey().equals(message.getInstanceKey())) {
                 log.info("Receive message listener 没有找到该消息对应的请求消息，跳过处理");
                 return;

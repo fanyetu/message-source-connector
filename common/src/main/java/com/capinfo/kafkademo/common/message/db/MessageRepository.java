@@ -17,7 +17,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Query("update Message set processFlag = '1' where messageId = :messageId")
     void updateProcessFlag(@Param(value = "messageId") String messageId);
 
-    Message findMessageByMessageId(String messageId);
+    Message findMessageByMessageIdAndProcessFlag(String messageId, String processFlag);
 
 
 }

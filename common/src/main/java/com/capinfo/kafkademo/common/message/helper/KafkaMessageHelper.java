@@ -62,13 +62,13 @@ public class KafkaMessageHelper implements MessageHelper {
     }
 
     /**
-     * 通过messageId获取请求消息
+     * 通过messageId和processFlag获取请求消息
      *
      * @param messageId
      * @return
      */
-    public Message getReqMessage(String messageId) {
-        return messageRepository.findMessageByMessageId(messageId);
+    public Message getUnprocessedReqMessage(String messageId) {
+        return messageRepository.findMessageByMessageIdAndProcessFlag(messageId, MessageConstant.FALSE);
     }
 
     /**
@@ -176,7 +176,7 @@ public class KafkaMessageHelper implements MessageHelper {
                     this, receivedMessageRepository);
             kafkaListenerEndpointRegistry.registerListenerContainer(
                     receiveCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic,
-                            getInstanceKey()),
+                            getInstanceKey() + GROUP_SUFFIX),
                     kafkaListenerContainerFactory, true);
             listenerMap.put(topic, MessageConstant.TRUE);
         } finally {
