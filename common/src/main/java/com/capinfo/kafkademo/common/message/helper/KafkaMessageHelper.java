@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Resource;
 import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -49,6 +50,10 @@ public class KafkaMessageHelper implements MessageHelper {
 
     @Value("${server.port}")
     private String port;
+
+    private final ConcurrentHashMap<String, Thread> threadMap = new ConcurrentHashMap<>();
+
+    private final ConcurrentHashMap<String, RespMessage> respMap = new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<String, String> listenerMap = new ConcurrentHashMap<>(8);
 
@@ -131,39 +136,56 @@ public class KafkaMessageHelper implements MessageHelper {
 
     @Override
     public RespMessage invoke(ReqMessage req) {
-        String messageId = send(req);
+        String messageId = null;
+        try {
+            String sourceTopic = req.getSourceTopic();
+            String s = listenerMap.get(sourceTopic);
+            if (StrUtil.isBlank(s)) {
+                startReceive(sourceTopic, (request, response) -> {
+                    // do nothing
+                });
+            }
 
-        String sourceTopic = req.getSourceTopic();
-        String s = listenerMap.get(sourceTopic);
-        if (StrUtil.isBlank(s)) {
-            startReceive(sourceTopic, (request, response) -> {
-                // do nothing
-            });
+            messageId = send(req);
+            // 表示当前线程在等待
+            threadMap.put(messageId, Thread.currentThread());
+            // 线程等待60秒
+            LockSupport.parkNanos(60L * 1000 * 1000 * 1000);
+            RespMessage resp = respMap.get(messageId);
+            if (resp == null) {
+                throw new RuntimeException("请求超时，请稍后重试");
+            }
+            return resp;
+        }finally {
+            if (messageId != null) {
+                threadMap.remove(messageId);
+                respMap.remove(messageId);
+            }
         }
 
-        int count = 300;
-        while (true) {
-            ReceivedMessage result = receivedMessageRepository.findReceivedMessageByMessageId(messageId);
-            if (result != null) {
-                RespMessage respMessage = new RespMessage();
-                respMessage.setMessageId(messageId);
-                respMessage.setSourceTopic(req.getTargetTopic());
-                respMessage.setTargetTopic(result.getTopic());
-                respMessage.setContent(result.getContent());
-                return respMessage;
-            }
-
-            if (count <= 0) {
-                return null;
-            }
-
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                // do nothing
-            }
-            count--;
-        }
+//        int count = 300;
+//        while (true) {
+//            ReceivedMessage result = receivedMessageRepository.findReceivedMessageByMessageId(messageId);
+//            if (result != null) {
+//                RespMessage respMessage = new RespMessage();
+//                respMessage.setMessageId(messageId);
+//                respMessage.setSourceTopic(req.getTargetTopic());
+//                respMessage.setTargetTopic(result.getTopic());
+//                respMessage.setContent(result.getContent());
+//                return respMessage;
+//            }
+//
+//            if (count <= 0) {
+//                return null;
+//            }
+//
+//            try {
+//                Thread.sleep(100);
+//            } catch (InterruptedException e) {
+//                // do nothing
+//            }
+//            count--;
+//        }
     }
 
     @Override
@@ -173,7 +195,7 @@ public class KafkaMessageHelper implements MessageHelper {
         try {
             checkListener(topic);
             ReceiveCustomMessageListener receiveCustomMessageListener = new ReceiveCustomMessageListener(handler,
-                    this, receivedMessageRepository);
+                    this, receivedMessageRepository, threadMap, respMap);
             kafkaListenerEndpointRegistry.registerListenerContainer(
                     receiveCustomMessageListener.createKafkaListenerEndpoint(StrUtil.EMPTY, topic,
                             getInstanceKey() + GROUP_SUFFIX),

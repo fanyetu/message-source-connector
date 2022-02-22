@@ -15,9 +15,13 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.BeanUtils;
 import org.springframework.kafka.config.KafkaListenerEndpoint;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
+import org.springframework.kafka.listener.AcknowledgingMessageListener;
 import org.springframework.kafka.listener.MessageListener;
+import org.springframework.kafka.support.Acknowledgment;
 
 import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * @author zhanghaonan
@@ -31,11 +35,18 @@ public class ReceiveCustomMessageListener extends CustomMessageListener {
 
     private ReceivedMessageRepository receivedMessageRepository;
 
+    private final ConcurrentHashMap<String, Thread> threadMap;
+
+    private final ConcurrentHashMap<String, RespMessage> respMap;
+
     public ReceiveCustomMessageListener(MessageReceiveHandler messageReceiveHandler, KafkaMessageHelper kafkaMessageHelper,
-                                        ReceivedMessageRepository receivedMessageRepository) {
+                                        ReceivedMessageRepository receivedMessageRepository, ConcurrentHashMap<String, Thread> threadMap,
+                                        ConcurrentHashMap<String, RespMessage> respMap) {
         this.messageReceiveHandler = messageReceiveHandler;
         this.kafkaMessageHelper = kafkaMessageHelper;
         this.receivedMessageRepository = receivedMessageRepository;
+        this.threadMap = threadMap;
+        this.respMap = respMap;
     }
 
     @Override
@@ -44,14 +55,14 @@ public class ReceiveCustomMessageListener extends CustomMessageListener {
         MethodKafkaListenerEndpoint<String, String> kafkaListenerEndpoint =
                 createDefaultMethodKafkaListenerEndpoint(name, topic, groupId);
         kafkaListenerEndpoint.setBean(new ReceiveCustomMessageListener.ReceiveMessageListener(messageReceiveHandler,
-                kafkaMessageHelper, receivedMessageRepository));
+                kafkaMessageHelper, receivedMessageRepository, threadMap, respMap));
         kafkaListenerEndpoint.setMethod(ReceiveCustomMessageListener.ReceiveMessageListener.class.getMethod(
-                "onMessage", ConsumerRecord.class));
+                "onMessage", ConsumerRecord.class, Acknowledgment.class));
         return kafkaListenerEndpoint;
     }
 
     @Slf4j
-    private static class ReceiveMessageListener implements MessageListener<String, GenericData.Record> {
+    private static class ReceiveMessageListener implements AcknowledgingMessageListener<String, GenericData.Record> {
 
         private MessageReceiveHandler messageReceiveHandler;
 
@@ -59,15 +70,22 @@ public class ReceiveCustomMessageListener extends CustomMessageListener {
 
         private ReceivedMessageRepository receivedMessageRepository;
 
+        private final ConcurrentHashMap<String, Thread> threadMap;
+
+        private final ConcurrentHashMap<String, RespMessage> respMap;
+
         public ReceiveMessageListener(MessageReceiveHandler messageReceiveHandler, KafkaMessageHelper kafkaMessageHelper,
-                                      ReceivedMessageRepository receivedMessageRepository) {
+                                      ReceivedMessageRepository receivedMessageRepository, ConcurrentHashMap<String, Thread> threadMap,
+                                      ConcurrentHashMap<String, RespMessage> respMap) {
             this.messageReceiveHandler = messageReceiveHandler;
             this.kafkaMessageHelper = kafkaMessageHelper;
             this.receivedMessageRepository = receivedMessageRepository;
+            this.threadMap = threadMap;
+            this.respMap = respMap;
         }
 
         @Override
-        public void onMessage(ConsumerRecord<String, GenericData.Record> record) {
+        public void onMessage(ConsumerRecord<String, GenericData.Record> record, Acknowledgment acknowledgment) {
             log.info("Receive message listener 开始处理消息记录: " + record);
             // 读取数据，判断是否是在当前内存中，如果在则处理。
             GenericData.Record value = record.value();
@@ -90,8 +108,20 @@ public class ReceiveCustomMessageListener extends CustomMessageListener {
             receivedMessage.setInstanceKey(kafkaMessageHelper.getInstanceKey());
             receivedMessageRepository.save(receivedMessage);
 
+            respMap.put(messageId, resp);
+
+            // 判断是否有线程在等待
+            Thread mainThread = threadMap.get(messageId);
+            if (mainThread != null) {
+                LockSupport.unpark(mainThread);
+            }
+
             messageReceiveHandler.receive(reqMessage, resp);
             kafkaMessageHelper.makeReqMessageProcessed(messageId);
+            // 提交offset
+            if (acknowledgment != null) {
+                acknowledgment.acknowledge();
+            }
             log.info("Receive message listener 消息记录处理完成");
         }
     }

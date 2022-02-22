@@ -11,7 +11,9 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.network.Receive;
 import org.springframework.kafka.config.KafkaListenerEndpoint;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
+import org.springframework.kafka.listener.AcknowledgingMessageListener;
 import org.springframework.kafka.listener.MessageListener;
+import org.springframework.kafka.support.Acknowledgment;
 
 import java.util.Date;
 
@@ -42,12 +44,12 @@ public class ConsumeCustomMessageListener extends CustomMessageListener {
         kafkaListenerEndpoint.setBean(new ConsumeMessageListener(messageConsumeHandler, kafkaMessageHelper,
                 receivedMessageRepository));
         kafkaListenerEndpoint.setMethod(ConsumeMessageListener.class.getMethod(
-                "onMessage", ConsumerRecord.class));
+                "onMessage", ConsumerRecord.class, Acknowledgment.class));
         return kafkaListenerEndpoint;
     }
 
     @Slf4j
-    private static class ConsumeMessageListener implements MessageListener<String, GenericData.Record> {
+    private static class ConsumeMessageListener implements AcknowledgingMessageListener<String, GenericData.Record> {
 
         private MessageConsumeHandler messageConsumeHandler;
 
@@ -63,7 +65,7 @@ public class ConsumeCustomMessageListener extends CustomMessageListener {
         }
 
         @Override
-        public void onMessage(ConsumerRecord<String, GenericData.Record> record) {
+        public void onMessage(ConsumerRecord<String, GenericData.Record> record, Acknowledgment acknowledgment) {
             log.info("Consume message listener 开始处理消息记录: " + record);
             GenericData.Record value = record.value();
 
@@ -78,6 +80,10 @@ public class ConsumeCustomMessageListener extends CustomMessageListener {
             receivedMessageRepository.save(receivedMessage);
 
             messageConsumeHandler.consume(event);
+            // 提交offset
+            if (acknowledgment != null) {
+                acknowledgment.acknowledge();
+            }
             log.info("Consume message listener 消息记录处理完成");
         }
     }

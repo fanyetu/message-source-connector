@@ -12,8 +12,11 @@ import org.apache.avro.generic.GenericData;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.config.KafkaListenerEndpoint;
 import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
+import org.springframework.kafka.listener.AcknowledgingMessageListener;
 import org.springframework.kafka.listener.MessageListener;
+import org.springframework.kafka.support.Acknowledgment;
 
+import java.lang.reflect.Method;
 import java.util.Date;
 
 /**
@@ -43,12 +46,12 @@ public class ResponseCustomMessageListener extends CustomMessageListener {
         kafkaListenerEndpoint.setBean(new ResponseMessageListener(messageResponseHandler, kafkaMessageHelper,
                 receivedMessageRepository));
         kafkaListenerEndpoint.setMethod(ResponseMessageListener.class.getMethod(
-                "onMessage", ConsumerRecord.class));
+                "onMessage", ConsumerRecord.class, Acknowledgment.class));
         return kafkaListenerEndpoint;
     }
 
     @Slf4j
-    private static class ResponseMessageListener implements MessageListener<String, GenericData.Record> {
+    private static class ResponseMessageListener implements AcknowledgingMessageListener<String, GenericData.Record> {
 
         private MessageResponseHandler messageResponseHandler;
 
@@ -65,7 +68,7 @@ public class ResponseCustomMessageListener extends CustomMessageListener {
         }
 
         @Override
-        public void onMessage(ConsumerRecord<String, GenericData.Record> record) {
+        public void onMessage(ConsumerRecord<String, GenericData.Record> record, Acknowledgment acknowledgment) {
             log.info("Response message listener 开始处理消息记录: " + record);
 
             // 读取数据，并返回
@@ -87,8 +90,18 @@ public class ResponseCustomMessageListener extends CustomMessageListener {
 
             resp = messageResponseHandler.receive(req, resp);
             kafkaMessageHelper.response(resp);
+            // 提交offset
+            if (acknowledgment != null) {
+                acknowledgment.acknowledge();
+            }
 
             log.info("Response message listener 消息记录处理完成. 返回值: " + resp);
         }
+    }
+
+    public static void main(String[] args) throws NoSuchMethodException {
+        Method[] methods = ResponseMessageListener.class.getMethods();
+        Method method = ResponseMessageListener.class.getMethod("onMessage", ConsumerRecord.class, Acknowledgment.class);
+        System.out.println(methods);
     }
 }
