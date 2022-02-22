@@ -27,4 +27,4 @@ spring:
       value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
       enable-auto-commit: false
     listener:
-      ack-mode: manual
+      ack-mode: manual_immediate
