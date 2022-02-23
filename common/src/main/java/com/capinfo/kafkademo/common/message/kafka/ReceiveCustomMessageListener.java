@@ -106,6 +106,7 @@ public class ReceiveCustomMessageListener extends CustomMessageListener {
             receivedMessage.setTopic(resp.getTargetTopic());
             receivedMessage.setContent(resp.getContent());
             receivedMessage.setInstanceKey(kafkaMessageHelper.getInstanceKey());
+            // TODO 重启kafka之后会重新消费，存储时会报主键重复
             receivedMessageRepository.save(receivedMessage);
 
             respMap.put(messageId, resp);

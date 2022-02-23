@@ -98,10 +98,4 @@ public class ResponseCustomMessageListener extends CustomMessageListener {
             log.info("Response message listener 消息记录处理完成. 返回值: " + resp);
         }
     }
-
-    public static void main(String[] args) throws NoSuchMethodException {
-        Method[] methods = ResponseMessageListener.class.getMethods();
-        Method method = ResponseMessageListener.class.getMethod("onMessage", ConsumerRecord.class, Acknowledgment.class);
-        System.out.println(methods);
-    }
 }
