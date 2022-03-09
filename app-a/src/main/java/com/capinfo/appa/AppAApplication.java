@@ -1,16 +1,20 @@
 package com.capinfo.appa;
 
+import cn.hutool.core.util.IdUtil;
+import com.capinfo.appa.client.TestClient;
+import com.capinfo.appa.db.Test;
+import com.capinfo.appa.db.TestRepository;
 import com.capinfo.kafkademo.common.message.helper.EventMessage;
 import com.capinfo.kafkademo.common.message.helper.KafkaMessageHelper;
 import com.capinfo.kafkademo.common.message.helper.ReqMessage;
 import com.capinfo.kafkademo.common.message.helper.RespMessage;
-import com.sun.org.apache.xml.internal.security.Init;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.kafka.annotation.EnableKafka;
@@ -19,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.annotation.Resource;
 import java.util.Map;
 
 @SpringBootApplication
@@ -29,10 +34,17 @@ import java.util.Map;
 @RestController
 @RequestMapping("/app-a")
 @Slf4j
+@EnableFeignClients
 public class AppAApplication implements InitializingBean {
 
     @Autowired
     private KafkaMessageHelper kafkaMessageHelper;
+
+    @Resource
+    private TestRepository testRepository;
+
+    @Resource
+    private TestClient testClient;
 
     public static void main(String[] args) {
         SpringApplication.run(AppAApplication.class, args);
@@ -43,6 +55,32 @@ public class AppAApplication implements InitializingBean {
         kafkaMessageHelper.startReceive("app-a-message-async", (req, resp) -> {
             log.info("===================处理返回消息==================\r\n{}\r\n=================================", resp);
         });
+    }
+
+    @PostMapping("/testFeign")
+    public String testFeign(@RequestBody String data) {
+        String result = testClient.test(data);
+
+        Test test = new Test();
+        test.setContent(IdUtil.fastSimpleUUID());
+        testRepository.save(test);
+
+        return result;
+    }
+
+    @PostMapping("/test")
+    public String test(@RequestBody String data) {
+        ReqMessage reqMessage = new ReqMessage();
+        reqMessage.setSourceTopic("app-a-test");
+        reqMessage.setTargetTopic("app-b-test");
+        reqMessage.setContent(data);
+        RespMessage resp = kafkaMessageHelper.invoke(reqMessage);
+
+        Test test = new Test();
+        test.setContent(IdUtil.fastSimpleUUID());
+        testRepository.save(test);
+
+        return resp.getContent();
     }
 
     @PostMapping("/send")

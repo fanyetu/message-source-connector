@@ -1,0 +1,25 @@
+server:
+  port: 7070
+spring:
+  application:
+    name: app-b
+  datasource:
+    url: jdbc:mysql://35.10.208.86:3306/zhn_test?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&useSSL=false
+    username: root
+    password: 111111
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    database: mysql
+    database-platform: org.hibernate.dialect.MySQL5InnoDBDialect
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+  kafka:
+    bootstrap-servers: 35.10.208.236:9093
+    listener:
+      ack-mode: record
+    consumer:
+      enable-auto-commit: false
+      isolation-level: read_committed
+    producer:
+      transaction-id-prefix: capinfo-${spring.application.name}
